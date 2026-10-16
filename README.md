@@ -7,3 +7,17 @@
 * **Scope :** Validation des données, découpage chronologique strict, entraînement d'une baseline et d'une Random Forest, packaging Docker et service de prédiction API[cite: 1, 39, 48, 51].
 * **Non-Goals :** Pas de recherche d'hyperparamètres poussée, pas de plateforme cloud complexe au-delà du conteneur local[cite: 40].
 * **Verification :** Validation via des tests automatisés (`pytest`), l'exécution de pipelines de build et la vérification du comportement de l'API (codes de statut et validation Pydantic)[cite: 18, 24].
+
+## Local development
+
+Run these commands from the repository root:
+
+```bash
+uv sync --locked
+uv run --locked python -m bike_demand.preflight
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked pytest -q -m infra
+uv run --locked pytest -q -m lab1
+uv run --locked pytest -q
+```
