@@ -1,7 +1,5 @@
 # mlops-thu1-le17onchangedepoque-bike-demand
 
-# mlops-thu1-le17onchangedepoque-bike-demand
-
 ## Project Scope
 * **User + Goal :** Estimer la demande horaire de vélos à partir de données calendaires et météorologiques pour les opérateurs et analyses opérationnelles[cite: 3, 68].
 * **Inputs :** 12 variables ordonnées de calendrier et de météo (saison, heure, température, humidité, vent, etc.), excluant `cnt`, `casual` et `registered`[cite: 46, 47].
