@@ -13,3 +13,4 @@ reports/lab3-*.log
 reports/lab3-image-id.txt
 .env
 .env.*
+reports/lab3-image-revision.txt

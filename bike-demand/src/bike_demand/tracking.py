@@ -1,6 +1,7 @@
 """Provided local tracking plumbing. No running MLflow viewer is required."""
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,7 +21,9 @@ def training_commit(root: Path) -> str:
         text=True,
         check=False,
     )
-    return result.stdout.strip() if result.returncode == 0 else "unavailable"
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return os.environ.get("BIKE_DEMAND_SOURCE_REVISION", "unavailable")
 
 
 def working_tree_dirty(root: Path) -> bool | None:
@@ -30,7 +33,14 @@ def working_tree_dirty(root: Path) -> bool | None:
         text=True,
         check=False,
     )
-    return bool(result.stdout.strip()) if result.returncode == 0 else None
+    if result.returncode == 0:
+        return bool(result.stdout.strip())
+    source_clean = os.environ.get("BIKE_DEMAND_SOURCE_CLEAN")
+    if source_clean == "true":
+        return False
+    if source_clean == "false":
+        return True
+    return None
 
 
 class Tracking:

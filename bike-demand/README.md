@@ -144,11 +144,16 @@ From the repository root, run these commands in PowerShell:
 
 ```powershell
 Set-Location bike-demand
+$dirty = git status --porcelain
+if ($dirty) { throw "Use a clean committed checkout before building" }
+$revision = git rev-parse HEAD
 $tag = "bike-demand-lab3:lab3-clean-environment"
-docker build --pull --no-cache --progress=plain -t $tag . 2>&1 |
+docker build --build-arg "SOURCE_REVISION=$revision" --pull --no-cache --progress=plain -t $tag . 2>&1 |
     Tee-Object -FilePath reports/lab3-build.log
 docker image inspect $tag --format '{{.Id}}' |
     Tee-Object -FilePath reports/lab3-image-id.txt
+docker image inspect $tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' |
+    Tee-Object -FilePath reports/lab3-image-revision.txt
 docker run --rm $tag 2>&1 |
     Tee-Object -FilePath reports/lab3-run-1.log
 docker run --rm $tag 2>&1 |
@@ -158,7 +163,9 @@ docker run --rm --entrypoint uv $tag run --locked pytest -q 2>&1 |
 ```
 
 Each `docker run --rm` starts from a fresh container, so MLflow state and output
-files from a prior run cannot affect the next run. Compare the two JSON outputs'
+files from a prior run cannot affect the next run. The clean-checkout guard and
+`SOURCE_REVISION` build argument put the exact Git SHA in the image label and in
+both runs' `training_commit` metadata, even though `.git` is excluded. Compare the two JSON outputs'
 `data_sha256`, partition summaries, predictor settings, and validation MAEs with
 the Lab 2 values in `reports/lab2-week-01-team.md`. Run IDs and timestamps are
 expected to differ. Record any metric difference and investigate it; do not tune

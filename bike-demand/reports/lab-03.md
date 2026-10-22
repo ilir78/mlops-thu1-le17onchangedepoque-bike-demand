@@ -11,6 +11,7 @@ changes are part of this lab.
 - Frozen data SHA-256: `e03de4ee4ef4dc376ac6e04bf829673c6269e8eba5c60fa121640fa2f829504f`
 - Configuration: `configs/baseline.yaml`; fixed 12 predictors and Random Forest preset.
 - Lock: committed `uv.lock`; Docker uses Python 3.12.15 and uv 0.12.23.
+- The build requires a clean Git checkout and passes its SHA into the image label and `training_commit` run metadata; `.git` remains outside the image.
 - Held-out test partition: 4,376 rows (2012-07-01 through 2012-12-31); not evaluated.
 
 ## Lab 2 reference
@@ -29,9 +30,9 @@ Its final run IDs are documented in `reports/lab2-week-01-team.md`.
 ## Clean build and container evidence
 
 Run the PowerShell procedure in `README.md` from the project root. It uses
-`--pull --no-cache`, captures the full build and run output, records the image
-ID, performs two fresh-container reruns, and executes the test suite inside the
-image. The stale-lock probe must fail in its disposable copy.
+`--pull --no-cache`, captures the full build and run output, records the image ID and source revision label, performs two fresh-container
+reruns, and executes the test suite inside the image. Both run records must show
+the same `training_commit` as the image revision label. The stale-lock probe must fail in its disposable copy.
 
 Fill in this table from the raw output files after running the commands. Do not
 copy the Lab 2 values into the Docker result fields.
@@ -40,6 +41,7 @@ copy the Lab 2 values into the Docker result fields.
 | --- | --- |
 | Lab 3 branch commit SHA | `<fill after commit>` |
 | Docker image ID | `<fill from reports/lab3-image-id.txt>` |
+| Image source revision label | `<fill from reports/lab3-image-revision.txt>` |
 | Clean build | `<record exit code and link reports/lab3-build.log>` |
 | Container run 1 / RF run ID / MAE | `<fill from reports/lab3-run-1.log>` |
 | Container run 2 / RF run ID / MAE | `<fill from reports/lab3-run-2.log>` |
@@ -63,7 +65,7 @@ change. Include the output logs in this report's links.
 
 ## Assistance and evidence limits
 
-The Dockerfile, ignore rules and repeatable procedure are prepared on this branch.
+The Dockerfile, ignore rules, provenance fallback and repeatable procedure are prepared on this branch.
 The current Codex environment cannot run Docker or produce host build/run logs.
 Therefore no image ID, Docker success, container metric or test result is claimed
 here. The report becomes complete when the recorded commands have been run and
