@@ -154,6 +154,8 @@ docker image inspect $tag --format '{{.Id}}' |
     Tee-Object -FilePath reports/lab3-image-id.txt
 docker image inspect $tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' |
     Tee-Object -FilePath reports/lab3-image-revision.txt
+docker image inspect $tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' |
+    Tee-Object -FilePath reports/lab3-image-revision.txt
 docker run --rm $tag 2>&1 |
     Tee-Object -FilePath reports/lab3-run-1.log
 docker run --rm $tag 2>&1 |
@@ -165,7 +167,8 @@ docker run --rm --entrypoint uv $tag run --locked pytest -q 2>&1 |
 Each `docker run --rm` starts from a fresh container, so MLflow state and output
 files from a prior run cannot affect the next run. The clean-checkout guard and
 `SOURCE_REVISION` build argument put the exact Git SHA in the image label and in
-both runs' `training_commit` metadata, even though `.git` is excluded. Compare the two JSON outputs'
+both runs' `training_commit` metadata, even though `.git` is excluded.
+Compare the two JSON outputs'
 `data_sha256`, partition summaries, predictor settings, and validation MAEs with
 the Lab 2 values in `reports/lab2-week-01-team.md`. Run IDs and timestamps are
 expected to differ. Record any metric difference and investigate it; do not tune
@@ -177,12 +180,13 @@ deliberately changes the project version without updating its lock:
 ```powershell
 $probe = Join-Path $env:TEMP "bike-demand-stale-lock-probe"
 Remove-Item $probe -Recurse -Force -ErrorAction SilentlyContinue
-Copy-Item . $probe -Recurse
-(Get-Content "$probe/pyproject.toml" -Raw).Replace('version = "0.1.0"', 'version = "0.1.1"') |
-    Set-Content "$probe/pyproject.toml"
+New-Item -ItemType Directory -Path $probe -Force | Out-Null
+Copy-Item pyproject.toml, uv.lock, .python-version, README.md $probe
+$project = (Get-Content "$probe/pyproject.toml" -Raw).Replace('version = "0.1.0"', 'version = "0.1.1"')
+[System.IO.File]::WriteAllText("$probe/pyproject.toml", $project, [System.Text.UTF8Encoding]::new($false))
 Push-Location $probe
 try {
-    uv sync --locked
+    uv sync --locked --no-install-project
     if ($LASTEXITCODE -eq 0) { throw "Expected stale-lock check to fail" }
 } finally {
     Pop-Location
