@@ -55,11 +55,16 @@ bounds, ordered features and effective model settings to the Lab 2 reference.
 Report the absolute MAE difference from Lab 2 for each predictor. Explain any
 observed difference without changing the frozen inputs or evaluating the test
 partition. Run IDs and timestamps are execution metadata and are expected to
-change. Include the output logs in this report's links.
+change. Link the committed raw logs here after capture:
+
+- Build: `[build log](lab3-build.log)` and `[image ID](lab3-image-id.txt)`
+- Run 1: `[run 1 log](lab3-run-1.log)`
+- Run 2: `[run 2 log](lab3-run-2.log)`
+- Container tests: `[test log](lab3-tests.log)`
 
 ## Review
 
-- Pull request: `<link after opening>`
+- Pull request: [Lab 3 draft PR #3](https://github.com/ilir78/mlops-thu1-le17onchangedepoque-bike-demand/pull/3)
 - Teammate reviewer and review observation: `<complete after review>`
 - Response or follow-up: `<complete after review>`
 
