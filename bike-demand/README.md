@@ -130,3 +130,60 @@ personal data. Team evidence goes in `reports/lab-01.md` and
 Each weekly report is due Sunday 23:59 of the same week (published time zone).
 Assessment policy comes from the instructor, not this repository.
 See `BACKLOG.md` for later labs.
+
+## Lab 3: same code, clean container
+
+The container rebuilds the locked environment from this directory. It includes the
+committed source, baseline configuration and frozen CSV, but excludes local
+virtual environments, MLflow databases/artifacts, Git metadata and environment
+files. The default command runs the existing Lab 2 baseline; it does not change
+the model, split, inputs or predictors. The held-out July–December 2012 partition
+remains untouched.
+
+From the repository root, run these commands in PowerShell:
+
+```powershell
+Set-Location bike-demand
+$tag = "bike-demand-lab3:lab3-clean-environment"
+docker build --pull --no-cache --progress=plain -t $tag . 2>&1 |
+    Tee-Object -FilePath reports/lab3-build.log
+docker image inspect $tag --format '{{.Id}}' |
+    Tee-Object -FilePath reports/lab3-image-id.txt
+docker run --rm $tag 2>&1 |
+    Tee-Object -FilePath reports/lab3-run-1.log
+docker run --rm $tag 2>&1 |
+    Tee-Object -FilePath reports/lab3-run-2.log
+docker run --rm --entrypoint uv $tag run --locked pytest -q 2>&1 |
+    Tee-Object -FilePath reports/lab3-tests.log
+```
+
+Each `docker run --rm` starts from a fresh container, so MLflow state and output
+files from a prior run cannot affect the next run. Compare the two JSON outputs'
+`data_sha256`, partition summaries, predictor settings, and validation MAEs with
+the Lab 2 values in `reports/lab2-week-01-team.md`. Run IDs and timestamps are
+expected to differ. Record any metric difference and investigate it; do not tune
+or score the test partition to force a match.
+
+To demonstrate that a stale lock is rejected, use a disposable copy. This
+deliberately changes the project version without updating its lock:
+
+```powershell
+$probe = Join-Path $env:TEMP "bike-demand-stale-lock-probe"
+Remove-Item $probe -Recurse -Force -ErrorAction SilentlyContinue
+Copy-Item . $probe -Recurse
+(Get-Content "$probe/pyproject.toml" -Raw).Replace('version = "0.1.0"', 'version = "0.1.1"') |
+    Set-Content "$probe/pyproject.toml"
+Push-Location $probe
+try {
+    uv sync --locked
+    if ($LASTEXITCODE -eq 0) { throw "Expected stale-lock check to fail" }
+} finally {
+    Pop-Location
+}
+```
+
+Keep the raw logs and image ID generated above in `reports/`, then complete
+`reports/lab-03.md` with the actual image ID, run IDs, measured metrics and
+observed differences. Do not claim a Docker build or container run until those
+logs exist. Submit the branch through a pull request and request a teammate
+review before merging.
