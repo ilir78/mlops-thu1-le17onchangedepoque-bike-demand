@@ -44,12 +44,27 @@ jobs:
           docker image inspect "$tag" --format '{{.Id}}' | tee reports/lab3-image-id.txt
           docker image inspect "$tag" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tee reports/lab3-image-revision.txt
           test "$(cat reports/lab3-image-revision.txt)" = "$revision"
-          docker run --rm "$tag" > reports/lab3-run-1.log 2>&1
+          if docker run --rm "$tag" > reports/lab3-run-1.log 2>&1; then
+            run_status=0
+          else
+            run_status=$?
+          fi
           cat reports/lab3-run-1.log
-          docker run --rm "$tag" > reports/lab3-run-2.log 2>&1
+          test "$run_status" -eq 0
+          if docker run --rm "$tag" > reports/lab3-run-2.log 2>&1; then
+            run_status=0
+          else
+            run_status=$?
+          fi
           cat reports/lab3-run-2.log
-          docker run --rm --entrypoint uv "$tag" run --locked pytest -q > reports/lab3-tests.log 2>&1
+          test "$run_status" -eq 0
+          if docker run --rm --entrypoint uv "$tag" run --locked pytest -q > reports/lab3-tests.log 2>&1; then
+            test_status=0
+          else
+            test_status=$?
+          fi
           cat reports/lab3-tests.log
+          test "$test_status" -eq 0
       - name: Verify the locked sync rejects a stale lock
         shell: bash
         run: |
