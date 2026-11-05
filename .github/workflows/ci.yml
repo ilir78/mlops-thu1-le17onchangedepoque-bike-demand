@@ -2,7 +2,15 @@ name: Bike Demand CI
 
 on:
   push:
+    paths-ignore:
+      - "bike-demand/reports/lab-03.md"
+      - "bike-demand/reports/lab3-*.log"
+      - "bike-demand/reports/lab3-image-*.txt"
   pull_request:
+    paths-ignore:
+      - "bike-demand/reports/lab-03.md"
+      - "bike-demand/reports/lab3-*.log"
+      - "bike-demand/reports/lab3-image-*.txt"
 
 jobs:
   quality:
