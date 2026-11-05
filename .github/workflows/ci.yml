@@ -88,7 +88,7 @@ jobs:
             exit 1
           fi
           cat reports/lab3-stale-lock-probe.log
-          grep -Eiq 'lockfile needs to be updated|lock file.*update|lock.*out of date' reports/lab3-stale-lock-probe.log
+          grep -Eiq 'lockfile.*needs to be updated|lock file.*update|lock.*out of date' reports/lab3-stale-lock-probe.log
       - name: Upload raw Lab 3 evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,4 +103,4 @@ jobs:
             bike-demand/reports/lab3-tests.log
             bike-demand/reports/lab3-stale-lock-probe.log
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
