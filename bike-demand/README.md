@@ -25,9 +25,9 @@ First setup requires internet for Python and the locked dependencies, unless
 these exact distributions are already cached. The frozen UCI CSV ships here;
 preflight does not download/repair it. `uv.lock` is shared across platforms;
 that is not evidence that every OS has been tested. macOS setup has been checked;
-Windows and Linux remain unverified. Remote CI is unavailable until a permitted
-repository is configured and a workflow actually runs on the checked revision.
-Do not regenerate the lock just to bypass an installation failure.
+Windows remains unverified. The Lab 3 pull request runs CI on a clean Ubuntu
+runner; this does not certify other operating systems. Do not regenerate the lock
+just to bypass an installation failure.
 
 ## Expected failure and exercise: Lab 1
 
@@ -100,7 +100,8 @@ uv run --locked mlflow server --backend-store-uri sqlite:///tracking/mlflow.db -
 
 `artifacts/`, `tracking/` and `.venv/` are ignored by Git. Team metrics may be
 committed as evidence; never commit credentials or individual private reports.
-CI currently checks only infrastructure/quality; expand it in Week 3.
+The Lab 3 CI checks infrastructure/quality and the container build/run procedure.
+Further CI expansion belongs to Week 3.
 
 ## Support and individual reports
 
