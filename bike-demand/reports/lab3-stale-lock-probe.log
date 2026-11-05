@@ -1,0 +1,2 @@
+error: The lockfile at `uv.lock` needs to be updated, but `--locked` was provided.
+
