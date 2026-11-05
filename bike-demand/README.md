@@ -138,7 +138,11 @@ committed source, baseline configuration and frozen CSV, but excludes local
 virtual environments, MLflow databases/artifacts, Git metadata and environment
 files. The default command runs the existing Lab 2 baseline; it does not change
 the model, split, inputs or predictors. The held-out July–December 2012 partition
-remains untouched.
+remains untouched. On this pull request, the `container` GitHub Actions job
+also builds the image on a clean Linux runner, performs both disposable runs,
+executes the tests in the image and checks stale-lock rejection. Download its
+`lab3-container-evidence-<commit-sha>` artifact from the Actions run for the raw
+logs and image ID.
 
 From the repository root, run these commands in PowerShell:
 
@@ -150,18 +154,21 @@ $revision = git rev-parse HEAD
 $tag = "bike-demand-lab3:lab3-clean-environment"
 docker build --build-arg "SOURCE_REVISION=$revision" --pull --no-cache --progress=plain -t $tag . 2>&1 |
     Tee-Object -FilePath reports/lab3-build.log
-docker image inspect $tag --format '{{.Id}}' |
-    Tee-Object -FilePath reports/lab3-image-id.txt
-docker image inspect $tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' |
-    Tee-Object -FilePath reports/lab3-image-revision.txt
-docker image inspect $tag --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' |
+if ($LASTEXITCODE -ne 0) { throw "Docker build failed; stop and inspect reports/lab3-build.log" }
+$image = docker image inspect $tag | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect the Docker image" }
+$image[0].Id | Tee-Object -FilePath reports/lab3-image-id.txt
+$image[0].Config.Labels['org.opencontainers.image.revision'] |
     Tee-Object -FilePath reports/lab3-image-revision.txt
 docker run --rm $tag 2>&1 |
     Tee-Object -FilePath reports/lab3-run-1.log
+if ($LASTEXITCODE -ne 0) { throw "Container run 1 failed; inspect its log" }
 docker run --rm $tag 2>&1 |
     Tee-Object -FilePath reports/lab3-run-2.log
+if ($LASTEXITCODE -ne 0) { throw "Container run 2 failed; inspect its log" }
 docker run --rm --entrypoint uv $tag run --locked pytest -q 2>&1 |
     Tee-Object -FilePath reports/lab3-tests.log
+if ($LASTEXITCODE -ne 0) { throw "Container tests failed; inspect reports/lab3-tests.log" }
 ```
 
 Each `docker run --rm` starts from a fresh container, so MLflow state and output
