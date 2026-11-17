@@ -1,6 +1,7 @@
 """Provided local tracking plumbing. No running MLflow viewer is required."""
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,23 +15,38 @@ def write_json(path: Path, value: dict) -> None:
 
 
 def training_commit(root: Path) -> str:
-    result = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.strip() if result.returncode == 0 else "unavailable"
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return os.environ.get("BIKE_DEMAND_SOURCE_REVISION", "unavailable")
 
 
 def working_tree_dirty(root: Path) -> bool | None:
-    result = subprocess.run(
-        ["git", "-C", str(root), "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return bool(result.stdout.strip()) if result.returncode == 0 else None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        result = None
+    if result is not None and result.returncode == 0:
+        return bool(result.stdout.strip())
+    source_clean = os.environ.get("BIKE_DEMAND_SOURCE_CLEAN")
+    if source_clean == "true":
+        return False
+    if source_clean == "false":
+        return True
+    return None
 
 
 class Tracking:
