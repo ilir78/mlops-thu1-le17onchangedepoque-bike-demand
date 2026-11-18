@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bike-demand"
+version = "0.1.0"
+description = "Hourly bike rental demand project starter."
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bike_demand"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "infra: checks for the local project setup",
+    "lab1: Lab 1 behavior checks",
+]
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
