@@ -40,39 +40,32 @@ jobs:
         with:
           version: 0.12.23
           python-version: "3.12"
-      - name: Build and run the clean image
+      - name: Build image and run container tests
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p reports
           test -z "$(git status --porcelain)"
           revision="$(git rev-parse HEAD)"
-          tag="bike-demand-lab3:ci"
-          docker build --build-arg "SOURCE_REVISION=$revision" --pull --no-cache --progress=plain -t "$tag" . 2>&1 | tee reports/lab3-build.log
-          docker image inspect "$tag" --format '{{.Id}}' | tee reports/lab3-image-id.txt
-          docker image inspect "$tag" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tee reports/lab3-image-revision.txt
-          test "$(cat reports/lab3-image-revision.txt)" = "$revision"
-          if docker run --rm "$tag" > reports/lab3-run-1.log 2>&1; then
-            run_status=0
-          else
-            run_status=$?
-          fi
-          cat reports/lab3-run-1.log
-          test "$run_status" -eq 0
-          if docker run --rm "$tag" > reports/lab3-run-2.log 2>&1; then
-            run_status=0
-          else
-            run_status=$?
-          fi
-          cat reports/lab3-run-2.log
-          test "$run_status" -eq 0
-          if docker run --rm --entrypoint uv "$tag" run --locked pytest -q > reports/lab3-tests.log 2>&1; then
+          tag="bike-demand-lab4:ci"
+          docker build --build-arg "SOURCE_REVISION=$revision" --pull --no-cache --progress=plain -t "$tag" . 2>&1 | tee reports/lab4-build.log
+          docker image inspect "$tag" --format '{{.Id}}' | tee reports/lab4-image-id.txt
+          docker image inspect "$tag" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tee reports/lab4-image-revision.txt
+          test "$(cat reports/lab4-image-revision.txt)" = "$revision"
+          if docker run --rm --entrypoint uv "$tag" run --locked pytest -q > reports/lab4-tests.log 2>&1; then
             test_status=0
           else
             test_status=$?
           fi
-          cat reports/lab3-tests.log
+          cat reports/lab4-tests.log
           test "$test_status" -eq 0
+          docker run -d --rm --name bike-demand-api -p 127.0.0.1:8000:8000 "$tag" > reports/lab4-api-container-id.txt
+          trap 'docker stop bike-demand-api >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health > reports/lab4-health.json; then break; fi
+            sleep 1
+          done
+          curl --fail --silent -X POST http://127.0.0.1:8000/predict -H 'Content-Type: application/json' --data '{"season":1,"yr":0,"mnth":1,"hr":0,"holiday":0,"weekday":6,"workingday":0,"weathersit":1,"temp":0.24,"atemp":0.28,"hum":0.81,"windspeed":0}' | tee reports/lab4-predict.json
       - name: Verify the locked sync rejects a stale lock
         shell: bash
         run: |
@@ -97,18 +90,12 @@ jobs:
           fi
           cat reports/lab3-stale-lock-probe.log
           grep -Eiq 'lockfile.*needs to be updated|lock file.*update|lock.*out of date' reports/lab3-stale-lock-probe.log
-      - name: Upload raw Lab 3 evidence
+      - name: Upload raw Lab 4 evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: lab3-container-evidence-${{ github.sha }}
+          name: lab4-container-evidence-${{ github.sha }}
           path: |
-            bike-demand/reports/lab3-build.log
-            bike-demand/reports/lab3-image-id.txt
-            bike-demand/reports/lab3-image-revision.txt
-            bike-demand/reports/lab3-run-1.log
-            bike-demand/reports/lab3-run-2.log
-            bike-demand/reports/lab3-tests.log
-            bike-demand/reports/lab3-stale-lock-probe.log
+            bike-demand/reports/lab4-*
           if-no-files-found: warn
           retention-days: 90

@@ -28,5 +28,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable \
     && uv run --locked python -m bike_demand.preflight
 
-# Lab 3 reruns the unchanged Lab 2 baseline by default.
-CMD ["uv", "run", "--locked", "python", "-m", "bike_demand.train", "--config", "configs/baseline.yaml"]
+# Lab 4 serves the trusted, evaluated model; training remains an explicit command.
+EXPOSE 8000
+CMD ["uv", "run", "--locked", "uvicorn", "bike_demand.api:app", "--host", "0.0.0.0", "--port", "8000"]

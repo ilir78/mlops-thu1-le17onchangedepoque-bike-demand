@@ -206,3 +206,43 @@ Keep the raw logs and image ID generated above in `reports/`, then complete
 observed differences. Do not claim a Docker build or container run until those
 logs exist. Submit the branch through a pull request and request a teammate
 review before merging.
+
+## Lab 4: prediction API
+
+The API serves the trusted model already saved in `artifacts/`; startup verifies
+the artifact checksum, feature order and model version from
+`artifacts/model-metadata.json`. It never trains a model. The flat `POST /predict`
+JSON body contains exactly the twelve ordered predictors listed in
+`src/bike_demand/validate.py`. Calendar fields must be integers in their training
+ranges, and `temp`, `atemp`, `hum` and `windspeed` must be finite numbers in
+`[0, 1]`. Unknown fields (including `cnt`, `casual` and `registered`) are
+rejected with 422.
+
+Run locally from `bike-demand/`:
+
+```bash
+uv sync --locked
+uv run --locked uvicorn bike_demand.api:app --host 127.0.0.1 --port 8000
+uv run --locked pytest -q
+```
+
+`GET /health` returns 200 with the loaded `model_version`, or 503 if the model
+cannot be loaded or verified. `POST /predict` returns a finite nonnegative
+`prediction` and that same version; invalid inputs return 422 and unavailable
+models return 503. OpenAPI documentation is at `/docs`.
+
+Build and exercise the same container image (Docker required):
+
+```bash
+docker build --build-arg SOURCE_REVISION="$(git rev-parse HEAD)" -t bike-demand:lab4 .
+docker run --rm --entrypoint uv bike-demand:lab4 run --locked pytest -q
+docker run --rm -p 127.0.0.1:8000:8000 bike-demand:lab4
+```
+
+In another terminal, call `GET http://127.0.0.1:8000/health` and submit a valid
+twelve-field JSON object to `POST http://127.0.0.1:8000/predict`. The GitHub
+Actions container job builds this image, runs pytest inside it and records an
+HTTP health check and prediction response in the `lab4-container-evidence` run
+artifact. Preserve the actual CI run URL, image ID, revision, test summary and
+HTTP response in the team Lab 4 report after the job has run; do not infer a pass
+from the workflow definition.
