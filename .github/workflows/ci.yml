@@ -1,16 +1,17 @@
-name: Bike Demand CI
+name: Bike Demand CI and deployment
 
 on:
-  push:
-    paths-ignore:
-      - "bike-demand/reports/lab-03.md"
-      - "bike-demand/reports/lab3-*.log"
-      - "bike-demand/reports/lab3-image-*.txt"
   pull_request:
-    paths-ignore:
-      - "bike-demand/reports/lab-03.md"
-      - "bike-demand/reports/lab3-*.log"
-      - "bike-demand/reports/lab3-image-*.txt"
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bike-demand-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality:
@@ -19,83 +20,147 @@ jobs:
       run:
         working-directory: bike-demand
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           version: 0.12.23
           python-version: "3.12"
       - run: uv sync --locked
       - run: uv run --locked ruff check .
       - run: uv run --locked ruff format --check .
-      - run: uv run --locked pytest -q -m infra
+      - name: Run complete test suite
+        run: uv run --locked pytest -q --junitxml=reports/lab6-pytest.xml
+      - name: Prove regression guard rejects a plausible defect
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=src/bike_demand/train.py
+          cp "$target" /tmp/train.py.original
+          restore() { cp /tmp/train.py.original "$target"; }
+          trap restore EXIT
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/bike_demand/train.py")
+          text = path.read_text()
+          old = 'predictions = model.predict(validation_x)'
+          new = 'predictions = model.predict(validation_x) + 1.0  # injected regression probe'
+          if text.count(old) != 1:
+              raise SystemExit("Could not inject the expected disposable prediction defect")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          if uv run --locked pytest -q -m regression > reports/lab6-regression-fault.log 2>&1; then
+            cat reports/lab6-regression-fault.log
+            echo "Regression guard did not detect the injected defect" >&2
+            exit 1
+          fi
+          cat reports/lab6-regression-fault.log
+          grep -q "1 failed" reports/lab6-regression-fault.log
+          restore
+          trap - EXIT
+          uv run --locked pytest -q -m regression | tee reports/lab6-regression-repaired.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: lab6-quality-evidence-${{ github.sha }}
+          path: |
+            bike-demand/reports/lab6-pytest.xml
+            bike-demand/reports/lab6-regression-*.log
+          if-no-files-found: warn
+          retention-days: 90
 
   container:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: bike-demand
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: 0.12.23
-          python-version: "3.12"
-      - name: Build image and run container tests
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build image, run tests and smoke test API
+        working-directory: bike-demand
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p reports
-          test -z "$(git status --porcelain)"
-          revision="$(git rev-parse HEAD)"
-          tag="bike-demand-lab4:ci"
-          docker build --build-arg "SOURCE_REVISION=$revision" --pull --no-cache --progress=plain -t "$tag" . 2>&1 | tee reports/lab4-build.log
-          docker image inspect "$tag" --format '{{.Id}}' | tee reports/lab4-image-id.txt
-          docker image inspect "$tag" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' | tee reports/lab4-image-revision.txt
-          test "$(cat reports/lab4-image-revision.txt)" = "$revision"
-          if docker run --rm --entrypoint uv "$tag" run --locked pytest -q > reports/lab4-tests.log 2>&1; then
-            test_status=0
-          else
-            test_status=$?
-          fi
-          cat reports/lab4-tests.log
-          test "$test_status" -eq 0
-          docker run -d --rm --name bike-demand-api -p 127.0.0.1:8000:8000 "$tag" > reports/lab4-api-container-id.txt
+          revision="${GITHUB_SHA}"
+          image="bike-demand:ci-${GITHUB_SHA}"
+          docker build --build-arg "SOURCE_REVISION=$revision" --pull --no-cache --progress=plain -t "$image" . 2>&1 | tee reports/lab6-docker-build.log
+          docker run --rm --entrypoint uv "$image" run --locked pytest -q | tee reports/lab6-docker-pytest.log
+          docker run -d --rm --name bike-demand-api -p 127.0.0.1:8000:8000 "$image" > reports/lab6-container-id.txt
           trap 'docker stop bike-demand-api >/dev/null 2>&1 || true' EXIT
           for attempt in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:8000/health > reports/lab4-health.json; then break; fi
+            if curl --fail --silent http://127.0.0.1:8000/health > reports/lab6-container-health.json; then break; fi
             sleep 1
           done
-          curl --fail --silent -X POST http://127.0.0.1:8000/predict -H 'Content-Type: application/json' --data '{"season":1,"yr":0,"mnth":1,"hr":0,"holiday":0,"weekday":6,"workingday":0,"weathersit":1,"temp":0.24,"atemp":0.28,"hum":0.81,"windspeed":0}' | tee reports/lab4-predict.json
-      - name: Verify the locked sync rejects a stale lock
+          curl --fail --silent -X POST http://127.0.0.1:8000/predict -H 'Content-Type: application/json' --data '{"season":1,"yr":0,"mnth":1,"hr":0,"holiday":0,"weekday":6,"workingday":0,"weathersit":1,"temp":0.24,"atemp":0.28,"hum":0.81,"windspeed":0}' | tee reports/lab6-container-predict.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: lab6-container-evidence-${{ github.sha }}
+          path: bike-demand/reports/lab6-*
+          if-no-files-found: warn
+          retention-days: 90
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, container]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: bike-demand
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.12.23
+          python-version: "3.12"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - name: Validate deployment configuration and deploy with traffic rollback
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          REGISTRY: ${{ vars.GCP_ARTIFACT_REGISTRY }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
         shell: bash
         run: |
           set -euo pipefail
-          probe="$(mktemp -d)"
-          cp pyproject.toml uv.lock .python-version README.md "$probe/"
-          python - "$probe/pyproject.toml" <<'PY'
-          import pathlib
-          import sys
-
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
-          old = 'version = "0.1.0"'
-          if old not in text:
-              raise SystemExit("Could not find the expected disposable version string")
-          path.write_text(text.replace(old, 'version = "0.1.1"', 1))
-          PY
-          if (cd "$probe" && uv sync --locked --no-install-project) > reports/lab3-stale-lock-probe.log 2>&1; then
-            cat reports/lab3-stale-lock-probe.log
-            echo "Stale lock unexpectedly passed"
+          mkdir -p reports
+          for name in PROJECT REGION REGISTRY SERVICE GCP_WIF_PROVIDER GCP_DEPLOY_SERVICE_ACCOUNT; do
+            if [[ -z "${!name:-}" ]]; then echo "Missing GitHub variable for $name" >&2; exit 2; fi
+          done
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          image="${REGION}-docker.pkg.dev/${PROJECT}/${REGISTRY}/bike-demand:${GITHUB_SHA}"
+          docker build --build-arg "SOURCE_REVISION=${GITHUB_SHA}" --pull -t "$image" .
+          docker push "$image"
+          previous="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json | jq -r '[.status.traffic[]? | select((.percent // 0) > 0) | "\(.revisionName)=\(.percent)"] | join(",")')"
+          if [[ -z "$previous" ]]; then echo "Cannot capture current Cloud Run traffic split" >&2; exit 1; fi
+          tag="candidate-${GITHUB_SHA:0:12}"
+          gcloud run deploy "$SERVICE" --project "$PROJECT" --region "$REGION" --image "$image" --no-traffic --tag "$tag" --quiet
+          service_url="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format='value(status.url)')"
+          candidate_url="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json | jq -r --arg tag "$tag" '.status.traffic[] | select(.tag == $tag) | .url' | head -n1)"
+          if [[ -z "$service_url" || -z "$candidate_url" ]]; then echo "Could not resolve stable or tagged URL" >&2; exit 1; fi
+          token="$(gcloud auth print-identity-token --audiences="$service_url")"
+          if ! BIKE_DEMAND_BASE_URL="$candidate_url" BIKE_DEMAND_ID_TOKEN="$token" uv run --locked python ../check_services.py; then
+            echo "Candidate failed identity check; prior traffic remains at $previous" | tee reports/lab6-deploy-result.txt
             exit 1
           fi
-          cat reports/lab3-stale-lock-probe.log
-          grep -Eiq 'lockfile.*needs to be updated|lock file.*update|lock.*out of date' reports/lab3-stale-lock-probe.log
-      - name: Upload raw Lab 4 evidence
+          gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" --to-latest --quiet
+          if ! BIKE_DEMAND_BASE_URL="$service_url" BIKE_DEMAND_ID_TOKEN="$token" uv run --locked python ../check_services.py; then
+            gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" --to-revisions "$previous" --quiet
+            echo "Live check failed; restored traffic to $previous" | tee reports/lab6-deploy-result.txt
+            exit 1
+          fi
+          revision="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format='value(status.latestReadyRevisionName)')"
+          printf 'image=%s\nrevision=%s\nurl=%s\nprevious_traffic=%s\n' "$image" "$revision" "$service_url" "$previous" | tee reports/lab6-deploy-result.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: lab4-container-evidence-${{ github.sha }}
-          path: |
-            bike-demand/reports/lab4-*
+          name: lab6-deploy-evidence-${{ github.sha }}
+          path: bike-demand/reports/lab6-deploy-result.txt
           if-no-files-found: warn
           retention-days: 90
