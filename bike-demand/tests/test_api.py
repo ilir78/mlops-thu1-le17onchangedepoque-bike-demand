@@ -9,6 +9,8 @@ from sklearn.dummy import DummyRegressor
 
 from bike_demand import api
 
+pytestmark = pytest.mark.api
+
 VALID = {
     "season": 1,
     "yr": 0,
@@ -53,7 +55,11 @@ def test_health_and_predict_return_loaded_model_version(install_model):
     with TestClient(api.app) as client:
         health = client.get("/health")
         assert health.status_code == 200
-        assert health.json() == {"status": "ok", "model_version": "test-model-42"}
+        assert health.json() == {
+            "status": "ok",
+            "model_version": "test-model-42",
+            "model_sha256": json.loads(install_model[1].read_text())["model_sha256"],
+        }
 
         response = client.post("/predict", json=VALID)
         assert response.status_code == 200

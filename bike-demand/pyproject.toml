@@ -38,4 +38,7 @@ markers = [
     "infra: supplied plumbing; passes before the exercises are implemented",
     "lab1: Week 1 Lab 1 team-helper behavior contract; one supplied test fails until repaired",
     "exercise: Week 1 Lab 2 data/split/baseline exercises",
+    "api: prediction API contract tests",
+    "regression: regression checks against committed validation results",
+    "servicecheck: tests for the Cloud Run live model identity check",
 ]
