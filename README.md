@@ -48,3 +48,11 @@ The `deploy` job requires both `quality` and `container` to pass and runs only a
 `bike-demand/tests/test_regression.py` refits the fixed Random Forest using only the chronological train and validation partitions and recomputes the recorded validation MAE in `bike-demand/reports/metrics.json` (`86.84685685591091`). It never reads the held-out July–December 2012 test partition. The assertion is exact because the frozen dataset, locked dependencies, fixed random seed and single-thread model reproduce the same floating-point result in the current environment. A model/data/split change that alters the measured score must therefore update the reviewed baseline intentionally; a broad tolerance could hide a meaningful regression. The workflow also injects a disposable +1 prediction defect on the runner, confirms that the regression test fails, restores the source, and reruns the test green. Logs are kept in the quality job workspace and can be downloaded as workflow evidence.
 
 The CI fault-injection proves that the guard catches a plausible prediction defect and is repaired in the same CI job. The lab's peer-authored defect exercise still requires a teammate to choose and introduce a defect without telling the author, open a PR, and record the red check and subsequent repaired green check on that PR. Those human review events must be completed by the team; the automated probe is not represented as a substitute.
+
+
+## Pipeline and gate (Lab 7)
+
+### 1. Reproductibility Entry Point
+To run the complete training pipeline and evaluate a candidate against the quality gate locally:
+```bash
+uv run python src/bike_demand/gate.py
