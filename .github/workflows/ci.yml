@@ -27,7 +27,6 @@ jobs:
           python-version: "3.12"
       - run: uv sync --locked
       - run: uv run --locked ruff check .
-      - run: uv run --locked ruff check ../check_services.py
       - run: uv run --locked ruff format --check .
       - name: Run complete test suite
         run: uv run --locked pytest -q --junitxml=reports/lab6-pytest.xml
@@ -146,12 +145,12 @@ jobs:
           candidate_url="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format=json | jq -r --arg tag "$tag" '.status.traffic[] | select(.tag == $tag) | .url' | head -n1)"
           if [[ -z "$service_url" || -z "$candidate_url" ]]; then echo "Could not resolve stable or tagged URL" >&2; exit 1; fi
           token="$(gcloud auth print-identity-token --audiences="$service_url")"
-          if ! BIKE_DEMAND_BASE_URL="$candidate_url" BIKE_DEMAND_ID_TOKEN="$token" python ../check_services.py; then
+          if ! BIKE_DEMAND_BASE_URL="$candidate_url" BIKE_DEMAND_ID_TOKEN="$token" uv run --locked python ../check_services.py; then
             echo "Candidate failed identity check; prior traffic remains at $previous" | tee reports/lab6-deploy-result.txt
             exit 1
           fi
           gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" --to-latest --quiet
-          if ! BIKE_DEMAND_BASE_URL="$service_url" BIKE_DEMAND_ID_TOKEN="$token" python ../check_services.py; then
+          if ! BIKE_DEMAND_BASE_URL="$service_url" BIKE_DEMAND_ID_TOKEN="$token" uv run --locked python ../check_services.py; then
             gcloud run services update-traffic "$SERVICE" --project "$PROJECT" --region "$REGION" --to-revisions "$previous" --quiet
             echo "Live check failed; restored traffic to $previous" | tee reports/lab6-deploy-result.txt
             exit 1

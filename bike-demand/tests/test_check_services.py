@@ -1,19 +1,12 @@
 """Tests for the Lab 5 live model identity checker."""
 
-import importlib.util
 import json
 from pathlib import Path
 from urllib.request import Request
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location(
-    "check_services", ROOT / "check_services.py"
-)
-assert SPEC and SPEC.loader
-check_services = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(check_services)
+from bike_demand import service_check
 
 pytestmark = pytest.mark.servicecheck
 
@@ -46,7 +39,7 @@ def test_live_check_sends_bearer_token_and_matches_identity(tmp_path: Path) -> N
         seen["timeout"] = timeout
         return Response(expected)
 
-    assert check_services.check_service(
+    assert service_check.check_service(
         "https://tagged.example",
         token="id-token",
         metadata_path=metadata,
@@ -65,7 +58,7 @@ def test_live_check_fails_on_wrong_model_sha(tmp_path: Path) -> None:
         json.dumps({"model_version": "v1", "model_sha256": "expected"}),
         encoding="utf-8",
     )
-    assert not check_services.check_service(
+    assert not service_check.check_service(
         "https://service.example",
         metadata_path=metadata,
         urlopen=lambda *_args, **_kwargs: Response(
