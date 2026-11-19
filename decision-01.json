@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-11-19T18:00:00Z",
+  "candidate_version": "model-v2.1",
+  "candidate_sha256": "68d9ee81dd3682409197b6712caf7199bdd031c9e54432027a05580670ba6bb9",
+  "policy_reference": "configs/policy.yaml",
+  "evaluation_results": {
+    "mae": 38.5,
+    "baseline_comparison": "passed",
+    "integrity_check": "passed"
+  },
+  "decision": "ACCEPTED",
+  "serving_action": "Cloud Run revision updated, previous revision retained."
+}
