@@ -1,0 +1,16 @@
+policy_version: "1.0"
+evaluation_context:
+  train_period: "2011"
+  validation_period: "2012-01 to 2012-06"
+  held_test_period: "2012-07 to 2012-12"
+criteria:
+  quality:
+    max_mae: 45.0
+    improvement_over_baseline: 0.15  # Doit battre la baseline train-mean d'au moins 15%
+    comparison_with_incumbent: true  # Doit surpasser ou égaler l'incumbent selon les règles
+  integrity:
+    require_exact_bytes: true
+    sha256_verification: true
+  operation:
+    max_latency_ms: 250
+    required_endpoints: ["/health", "/predict"]
