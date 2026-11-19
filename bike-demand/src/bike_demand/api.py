@@ -1,9 +1,11 @@
-"""Validated HTTP API for the saved bike-demand model."""
+"""Validated HTTP API for the saved bike-demand model with structured logging."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -18,14 +20,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from bike_demand.validate import FEATURES
 
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger("bike_demand_api")
+
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_PATH = ROOT / "artifacts" / "model.joblib"
 METADATA_PATH = ROOT / "artifacts" / "model-metadata.json"
 
 
 class PredictionRequest(BaseModel):
-    """Exactly the twelve ordered model predictors; unknown fields are rejected."""
-
     model_config = ConfigDict(extra="forbid")
 
     season: Annotated[int, Field(strict=True, ge=1, le=4)]
@@ -42,7 +45,7 @@ class PredictionRequest(BaseModel):
     windspeed: Annotated[float, Field(strict=True, ge=0, le=1, allow_inf_nan=False)]
 
 
-def _load_model() -> tuple[object, str]:
+def _load_model() -> tuple[object, str, str]:
     metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
     if metadata.get("features") != list(FEATURES):
         raise ValueError("model metadata has an unexpected feature order")
@@ -53,18 +56,18 @@ def _load_model() -> tuple[object, str]:
     version = metadata.get("model_version")
     if not isinstance(version, str) or not version.strip():
         raise ValueError("model metadata has no usable model_version")
-    return joblib.load(MODEL_PATH), version
+    return joblib.load(MODEL_PATH), version, digest
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        app.state.model, app.state.model_version = _load_model()
+        app.state.model, app.state.model_version, app.state.model_sha256 = _load_model()
         app.state.model_error = None
     except Exception as exc:
-        # Keep the API up so health and prediction can report unavailable (503).
         app.state.model = None
         app.state.model_version = None
+        app.state.model_sha256 = None
         app.state.model_error = str(exc)
     yield
 
@@ -72,9 +75,34 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Bike Demand Prediction API", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def structured_logging_middleware(request: Request, call_next):
+    start_time = time.perf_counter()
+    status_code = 500
+    event = "error"
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        event = "scored" if status_code == 200 else "rejected"
+        return response
+    except Exception:
+        event = "exception"
+        raise
+    finally:
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        log_payload = {
+            "event": event,
+            "path": request.url.path,
+            "method": request.method,
+            "status": status_code,
+            "ms": duration_ms,
+            "model": getattr(app.state, "model_version", "unknown"),
+        }
+        logger.info(json.dumps(log_payload))
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_response(request: Request, exc: RequestValidationError):
-    # Pydantic error inputs can contain NaN/Infinity, which are not JSON values.
     detail = [
         {"loc": list(error["loc"]), "msg": error["msg"], "type": error["type"]}
         for error in exc.errors()
@@ -86,7 +114,11 @@ async def validation_error_response(request: Request, exc: RequestValidationErro
 def health():
     if getattr(app.state, "model", None) is None:
         raise HTTPException(status_code=503, detail="model unavailable")
-    return {"status": "ok", "model_version": app.state.model_version}
+    return {
+        "status": "ok",
+        "model_version": app.state.model_version,
+        "model_sha256": app.state.model_sha256,
+    }
 
 
 @app.post("/predict")
